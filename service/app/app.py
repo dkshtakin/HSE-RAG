@@ -42,9 +42,10 @@ logger = logging.getLogger(__name__)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(DEVICE, torch.__version__)
 
-FILTER_MODEL_DIR = 'models/rag_classifier_v4'
-EMBEDS_MODEL_NAME = 'codefuse-ai/F2LLM-v2-0.6B'
-EMBEDS_LOCAL_DIR = 'embeddings/F2LLM-v2-0.6B'
+FILTER_MODEL_NAME = 'dkshtakin/RuBioRoBERTa-RAG-filter'
+FILTER_MODEL_DIR = 'models/RuBioRoBERTa-RAG-filter'
+EMBEDS_MODEL_NAME = 'google/embeddinggemma-300m'
+EMBEDS_LOCAL_DIR = 'embeddings/embeddinggemma-300m'
 SPARSE_EMBEDS_NAME = 'Qdrant/BM25'
 RERANK_MODEL_NAME = 'jinaai/jina-reranker-v3'
 RERANK_LOCAL_DIR = 'models/jina-reranker-v3'
@@ -53,7 +54,7 @@ LLM_MODEL_NAME = 'Qwen3.5-4B-Q4_0.gguf'
 LLM_LOCAL_DIR = f'models/{LLM_MODEL_NAME}'
 
 CHUNK_SIZE = 1280
-CHUNK_OVERLAP = 32
+CHUNK_OVERLAP = 16
 HYBRID = True
 SUFFIX = '_hybrid'
 
@@ -91,6 +92,11 @@ def load_models():
     if MODELS_LOADED:
         return
 
+    _ = snapshot_download(
+        repo_id=FILTER_MODEL_NAME,
+        local_dir=FILTER_MODEL_DIR,
+        ignore_patterns=['*.bin', 'onnx/', 'openvino/']
+    )
     filter_model = AutoModelForSequenceClassification.from_pretrained(
         FILTER_MODEL_DIR,
         device_map='auto'
@@ -104,8 +110,8 @@ def load_models():
         local_dir=EMBEDS_LOCAL_DIR,
         ignore_patterns=['*.bin', 'onnx/', 'openvino/']
     )
-    query_encode_prefix = 'Instruct: Given a question, retrieve passages that can help answer the question.\nQuery: '
-    doc_encode_prefix = ''
+    query_encode_prefix = 'task: search result | query: '
+    doc_encode_prefix = 'title: none | text: '
     logger.info(f'doc_encode_prefix: {doc_encode_prefix}')
     logger.info(f'query_encode_prefix: {query_encode_prefix}')
     embeddings = HuggingFaceEmbeddings(
@@ -277,8 +283,9 @@ def load_qdrant():
         return
 
     client = QdrantClient(path="qdrant")
+    client.list_conn
 
-    collection_name=f'F2LLM-v2-0.6B_{CHUNK_SIZE}_{CHUNK_OVERLAP}'
+    collection_name=f'embeddinggemma-300m_{CHUNK_SIZE}_{CHUNK_OVERLAP}'
     vector_size=len(embeddings.embed_query(''))
     if HYBRID and not collection_name.endswith(SUFFIX):
         collection_name += SUFFIX
